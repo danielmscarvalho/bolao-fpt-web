@@ -94,7 +94,17 @@ function useRoundMatches(roundId) {
         .from('round_matches')
         .select(`
           *,
-          match:matches(*)
+          match:matches(
+            id,
+            home_team_id,
+            away_team_id,
+            home_score,
+            away_score,
+            match_date,
+            status,
+            home_team:teams!matches_home_team_id_fkey(id, name, short_name),
+            away_team:teams!matches_away_team_id_fkey(id, name, short_name)
+          )
         `)
         .eq('round_id', roundId)
         .order('created_at', { ascending: true });
@@ -192,7 +202,7 @@ function CurrentRound() {
             <div>
               <p className="text-sm text-muted-foreground">Prazo para palpites</p>
               <p className="font-semibold">
-                {new Date(currentRound.bets_deadline).toLocaleString('pt-BR')}
+                {new Date(currentRound.bets_deadline_at).toLocaleString('pt-BR')}
               </p>
             </div>
           </div>
@@ -216,8 +226,11 @@ function CurrentRound() {
               Carregando jogos...
             </div>
           ) : matches.length === 0 ? (
-            <div className="text-center py-4 text-muted-foreground">
-              Nenhum jogo cadastrado ainda
+            <div className="text-center py-8 border-2 border-dashed rounded-lg">
+              <p className="text-muted-foreground mb-2">Nenhum jogo cadastrado ainda</p>
+              <p className="text-sm text-muted-foreground">
+                Os jogos serão adicionados em breve
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -228,9 +241,13 @@ function CurrentRound() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
-                      <span className="font-semibold">{item.match?.home_team || 'Time Casa'}</span>
+                      <span className="font-semibold">
+                        {item.match?.home_team?.short_name || item.match?.home_team?.name || 'Time Casa'}
+                      </span>
                       <span className="text-muted-foreground text-sm">vs</span>
-                      <span className="font-semibold">{item.match?.away_team || 'Time Fora'}</span>
+                      <span className="font-semibold">
+                        {item.match?.away_team?.short_name || item.match?.away_team?.name || 'Time Fora'}
+                      </span>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {item.match?.match_date 
@@ -282,7 +299,7 @@ function RankingTable() {
             {index + 1}
           </div>
           <div className="flex-1">
-            <p className="font-semibold">{user.name || 'Usuário'}</p>
+            <p className="font-semibold">{user.name || user.email || 'Usuário'}</p>
             <p className="text-sm text-muted-foreground">
               {user.rounds_won || 0} rodadas vencidas
             </p>
@@ -343,6 +360,10 @@ function AllRounds() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Início</span>
                 <span>{new Date(round.start_date).toLocaleDateString('pt-BR')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Prazo</span>
+                <span>{new Date(round.bets_deadline_at).toLocaleDateString('pt-BR')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Valor</span>
