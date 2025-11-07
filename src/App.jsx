@@ -59,8 +59,7 @@ function useCurrentRound() {
       const { data, error } = await supabase
         .from('rounds')
         .select(`*, competition:competitions(*)`)
-        .or(`status.eq.active,status.eq.upcoming`)
-        .gte('end_date', now)
+        .eq('status', 'active')
         .order('start_date', { ascending: true })
         .limit(1)
         .single();
