@@ -59,7 +59,7 @@ function useCurrentRound() {
       const { data, error } = await supabase
         .from('rounds')
         .select(`*, competition:competitions(*)`)
-        .or(`status.eq.open,status.eq.upcoming`)
+        .or(`status.eq.active,status.eq.upcoming`)
         .gte('end_date', now)
         .order('start_date', { ascending: true })
         .limit(1)
@@ -191,7 +191,7 @@ function CurrentRound() {
             </CardDescription>
           </div>
           <Badge variant="secondary" className="text-lg px-4 py-2">
-            {currentRound.status === 'open' ? 'Aberta' : 'Próxima'}
+            {currentRound.status === 'active' ? 'Aberta' : 'Próxima'}
           </Badge>
         </div>
       </CardHeader>
@@ -202,7 +202,7 @@ function CurrentRound() {
             <div>
               <p className="text-sm text-muted-foreground">Prazo para palpites</p>
               <p className="font-semibold">
-                {new Date(currentRound.bets_deadline_at).toLocaleString('pt-BR')}
+                {new Date(currentRound.bets_deadline).toLocaleString('pt-BR')}
               </p>
             </div>
           </div>
@@ -341,11 +341,11 @@ function AllRounds() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">{round.name}</CardTitle>
               <Badge variant={
-                round.status === 'open' ? 'default' :
+                round.status === 'active' ? 'default' :
                 round.status === 'closed' ? 'secondary' :
                 'outline'
               }>
-                {round.status === 'open' ? 'Aberta' :
+                {round.status === 'active' ? 'Aberta' :
                  round.status === 'closed' ? 'Encerrada' :
                  'Próxima'}
               </Badge>
@@ -363,7 +363,7 @@ function AllRounds() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Prazo</span>
-                <span>{new Date(round.bets_deadline_at).toLocaleDateString('pt-BR')}</span>
+                <span>{new Date(round.bets_deadline).toLocaleDateString('pt-BR')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Valor</span>
