@@ -90,23 +90,20 @@ function useRoundMatches(roundId) {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('round_matches')
+        .from('matches')
         .select(`
-          *,
-          match:matches(
-            id,
-            home_team_id,
-            away_team_id,
-            home_score,
-            away_score,
-            match_date,
-            status,
-            home_team:teams!matches_home_team_id_fkey(id, name, short_name),
-            away_team:teams!matches_away_team_id_fkey(id, name, short_name)
-          )
+          id,
+          home_team_id,
+          away_team_id,
+          home_score,
+          away_score,
+          scheduled_at,
+          status,
+          home_team:teams!matches_home_team_id_fkey(id, name, short_name),
+          away_team:teams!matches_away_team_id_fkey(id, name, short_name)
         `)
         .eq('round_id', roundId)
-        .order('created_at', { ascending: true });
+        .order('scheduled_at', { ascending: true });
 
       if (error) throw error;
       setMatches(data || []);
@@ -233,24 +230,24 @@ function CurrentRound() {
             </div>
           ) : (
             <div className="space-y-2">
-              {matches.map((item) => (
+              {matches.map((match) => (
                 <div
-                  key={item.id}
+                  key={match.id}
                   className="border rounded-lg p-4 hover:bg-accent transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
                       <span className="font-semibold">
-                        {item.match?.home_team?.short_name || item.match?.home_team?.name || 'Time Casa'}
+                        {match.home_team?.short_name || match.home_team?.name || 'Time Casa'}
                       </span>
                       <span className="text-muted-foreground text-sm">vs</span>
                       <span className="font-semibold">
-                        {item.match?.away_team?.short_name || item.match?.away_team?.name || 'Time Fora'}
+                        {match.away_team?.short_name || match.away_team?.name || 'Time Fora'}
                       </span>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {item.match?.match_date 
-                        ? new Date(item.match.match_date).toLocaleDateString('pt-BR')
+                      {match.scheduled_at 
+                        ? new Date(match.scheduled_at).toLocaleDateString('pt-BR')
                         : 'Data a definir'}
                     </div>
                   </div>
