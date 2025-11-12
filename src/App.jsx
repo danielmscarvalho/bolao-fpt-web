@@ -5,6 +5,7 @@ import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Trophy, Calendar, Users, TrendingUp } from 'lucide-react';
+import { BettingInterface } from './components/BettingInterface';
 
 // ============================================
 // HOOKS CUSTOMIZADOS
@@ -153,6 +154,48 @@ function useRanking() {
 function CurrentRound() {
   const { currentRound, loading } = useCurrentRound();
   const { matches, loading: loadingMatches } = useRoundMatches(currentRound?.id);
+  const [showBetting, setShowBetting] = useState(false);
+
+  const handleSubmitBets = async (predictions) => {
+    try {
+      // Gerar número único da cartela
+      const ticketNumber = `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      
+      // Criar ticket
+      const { data: ticket, error: ticketError } = await supabase
+        .from('tickets')
+        .insert({
+          user_id: null, // Por enquanto sem autenticação
+          round_id: currentRound.id,
+          ticket_number: ticketNumber,
+          price: currentRound.ticket_price || 10.00,
+          payment_status: 'pending'
+        })
+        .select()
+        .single();
+      
+      if (ticketError) throw ticketError;
+      
+      // Criar palpites
+      const bets = Object.entries(predictions).map(([matchId, result]) => ({
+        ticket_id: ticket.id,
+        match_id: matchId,
+        predicted_result: result
+      }));
+      
+      const { error: betsError } = await supabase
+        .from('bets')
+        .insert(bets);
+      
+      if (betsError) throw betsError;
+      
+      alert(`✅ Palpites confirmados!\n\nNúmero da cartela: ${ticketNumber}\nValor: R$ ${ticket.price.toFixed(2)}\n\nBoa sorte! 🍀`);
+      setShowBetting(false);
+    } catch (error) {
+      console.error('Erro ao salvar palpites:', error);
+      alert('❌ Erro ao salvar palpites. Tente novamente.');
+    }
+  };
 
   if (loading) {
     return (
@@ -173,6 +216,17 @@ function CurrentRound() {
           <p>Nenhuma rodada ativa no momento</p>
         </CardContent>
       </Card>
+    );
+  }
+
+  if (showBetting && matches.length > 0) {
+    return (
+      <BettingInterface
+        round={currentRound}
+        matches={matches}
+        onSubmit={handleSubmitBets}
+        onCancel={() => setShowBetting(false)}
+      />
     );
   }
 
@@ -257,7 +311,12 @@ function CurrentRound() {
           )}
         </div>
 
-        <Button className="w-full mt-6" size="lg">
+        <Button 
+          className="w-full mt-6" 
+          size="lg"
+          onClick={() => setShowBetting(true)}
+          disabled={matches.length === 0}
+        >
           Fazer Palpites
         </Button>
       </CardContent>
