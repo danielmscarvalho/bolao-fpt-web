@@ -4,8 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './com
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
-import { Trophy, Calendar, Users, TrendingUp } from 'lucide-react';
+import { Trophy, Calendar, Users, TrendingUp, LogOut, User } from 'lucide-react';
 import { BettingInterface } from './components/BettingInterface';
+import { AuthModal } from './components/AuthModal';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // ============================================
 // HOOKS CUSTOMIZADOS
@@ -154,9 +156,15 @@ function useRanking() {
 function CurrentRound() {
   const { currentRound, loading } = useCurrentRound();
   const { matches, loading: loadingMatches } = useRoundMatches(currentRound?.id);
+  const { user } = useAuth();
   const [showBetting, setShowBetting] = useState(false);
 
   const handleSubmitBets = async (predictions) => {
+    if (!user) {
+      alert('⚠️ Você precisa estar logado para fazer palpites!');
+      return;
+    }
+
     try {
       // Gerar número único da cartela
       const ticketNumber = `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -165,7 +173,7 @@ function CurrentRound() {
       const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
         .insert({
-          user_id: null, // Por enquanto sem autenticação
+          user_id: user.id,
           round_id: currentRound.id,
           ticket_number: ticketNumber,
           price: currentRound.ticket_price || 10.00,
@@ -314,10 +322,16 @@ function CurrentRound() {
         <Button 
           className="w-full mt-6" 
           size="lg"
-          onClick={() => setShowBetting(true)}
+          onClick={() => {
+            if (!user) {
+              alert('⚠️ Você precisa estar logado para fazer palpites!');
+              return;
+            }
+            setShowBetting(true);
+          }}
           disabled={matches.length === 0}
         >
-          Fazer Palpites
+          {user ? 'Fazer Palpites' : 'Entre para Fazer Palpites'}
         </Button>
       </CardContent>
     </Card>
@@ -438,9 +452,20 @@ function AllRounds() {
 // APP PRINCIPAL
 // ============================================
 
-export default function App() {
+function AppContent() {
+  const { user, signOut } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={() => setShowAuthModal(false)}
+        />
+      )}
+
       {/* Header */}
       <header className="border-b">
         <div className="container mx-auto px-4 py-6">
@@ -454,7 +479,21 @@ export default function App() {
                 </p>
               </div>
             </div>
-            <Button>Entrar</Button>
+            
+            {user ? (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">{user.user_metadata?.name || user.email}</span>
+                </div>
+                <Button variant="outline" onClick={signOut}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sair
+                </Button>
+              </div>
+            ) : (
+              <Button onClick={() => setShowAuthModal(true)}>Entrar</Button>
+            )}
           </div>
         </div>
       </header>
@@ -505,6 +544,16 @@ export default function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
