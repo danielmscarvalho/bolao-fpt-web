@@ -4,10 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './com
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
-import { Trophy, Calendar, Users, TrendingUp, LogOut, User } from 'lucide-react';
+import { Trophy, Calendar, Users, TrendingUp, LogOut, User, Shield } from 'lucide-react';
 import { BettingInterface } from './components/BettingInterface';
 import { AuthModal } from './components/AuthModal';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AdminPanel } from './pages/AdminPanel';
 
 // ============================================
 // HOOKS CUSTOMIZADOS
@@ -455,6 +456,33 @@ function AllRounds() {
 function AppContent() {
   const { user, signOut } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Verificar se usuário é admin
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+
+    const checkAdmin = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+      
+      setIsAdmin(data?.is_admin || false);
+    };
+
+    checkAdmin();
+  }, [user]);
+
+  // Se está mostrando painel admin, renderizar apenas ele
+  if (showAdmin) {
+    return <AdminPanel />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -486,6 +514,12 @@ function AppContent() {
                   <User className="h-5 w-5 text-muted-foreground" />
                   <span className="font-medium">{user.user_metadata?.name || user.email}</span>
                 </div>
+                {isAdmin && (
+                  <Button variant="default" onClick={() => setShowAdmin(true)}>
+                    <Shield className="h-4 w-4 mr-2" />
+                    Admin
+                  </Button>
+                )}
                 <Button variant="outline" onClick={signOut}>
                   <LogOut className="h-4 w-4 mr-2" />
                   Sair
