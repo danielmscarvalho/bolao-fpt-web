@@ -103,7 +103,7 @@ export function AdminPanel() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="rodadas" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="rodadas">
               <Calendar className="h-4 w-4 mr-2" />
               Rodadas
@@ -119,6 +119,10 @@ export function AdminPanel() {
             <TabsTrigger value="usuarios">
               <Users className="h-4 w-4 mr-2" />
               Usuários
+            </TabsTrigger>
+            <TabsTrigger value="pagamentos">
+              <Check className="h-4 w-4 mr-2" />
+              Pagamentos
             </TabsTrigger>
           </TabsList>
 
@@ -136,6 +140,10 @@ export function AdminPanel() {
 
           <TabsContent value="usuarios">
             <UsersManagement />
+          </TabsContent>
+
+          <TabsContent value="pagamentos">
+            <PaymentsManagement />
           </TabsContent>
         </Tabs>
       </main>
@@ -942,6 +950,71 @@ function ResultsManagement() {
     }
   };
 
+  const finalizeRound = async () => {
+    if (!confirm('Finalizar rodada e calcular prêmios?\n\nIsso irá:\n- Calcular pontuação de todos os palpites\n- Definir vencedores\n- Enviar notificações')) return;
+
+    setUpdating(true);
+    try {
+      // 1. Calcular prêmios usando a função do banco
+      const { data: prizes, error: prizesError } = await supabase
+        .rpc('calculate_round_prizes', { p_round_id: selectedRound });
+
+      if (prizesError) throw prizesError;
+
+      // 2. Atualizar tickets com prêmios
+      for (const prize of prizes) {
+        await supabase
+          .from('tickets')
+          .update({
+            total_points: prize.total_points,
+            prize_amount: prize.prize_amount
+          })
+          .eq('id', prize.ticket_id);
+      }
+
+      // 3. Mudar status da rodada para finished
+      await supabase
+        .from('rounds')
+        .update({ status: 'finished' })
+        .eq('id', selectedRound);
+
+      // 4. Criar notificações
+      const winners = prizes.filter(p => p.prize_amount > 0);
+      const totalWinners = winners.length;
+      const prizePerWinner = winners[0]?.prize_amount || 0;
+
+      // Notificar todos os participantes
+      for (const prize of prizes) {
+        const isWinner = prize.prize_amount > 0;
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: prize.user_id,
+            round_id: selectedRound,
+            type: isWinner ? 'prize_won' : 'round_finished',
+            title: isWinner ? '🏆 Parabéns! Você ganhou!' : '🎮 Rodada Finalizada',
+            message: isWinner 
+              ? `Você foi um dos ${totalWinners} vencedores e ganhou R$ ${prizePerWinner.toFixed(2)}!`
+              : `A rodada foi finalizada. Você fez ${prize.total_points} pontos. ${totalWinners} vencedor(es) com ${winners[0]?.total_points || 0} pontos.`,
+            data: {
+              total_winners: totalWinners,
+              prize_amount: prizePerWinner,
+              user_points: prize.total_points,
+              winner_points: winners[0]?.total_points || 0
+            }
+          });
+      }
+
+      alert(`✅ Rodada finalizada!\n\n🏆 ${totalWinners} vencedor(es)\n💰 R$ ${prizePerWinner.toFixed(2)} cada\n🔔 Notificações enviadas`);
+      loadRounds();
+    } catch (error) {
+      console.error('Erro ao finalizar rodada:', error);
+      alert('❌ Erro: ' + error.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -970,6 +1043,10 @@ function ResultsManagement() {
         <Button onClick={autoUpdateResults} disabled={updating}>
           <RefreshCw className={`h-4 w-4 mr-2 ${updating ? 'animate-spin' : ''}`} />
           Buscar Resultados Automaticamente
+        </Button>
+        <Button onClick={finalizeRound} disabled={updating} className="bg-green-600 hover:bg-green-700">
+          <Trophy className="h-4 w-4 mr-2" />
+          Finalizar Rodada e Calcular Prêmios
         </Button>
       </div>
 
@@ -1220,6 +1297,183 @@ function UsersManagement() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+
+
+
+// ============================================
+// GERENCIAMENTO DE PAGAMENTOS
+// ============================================
+
+function PaymentsManagement() {
+  const [pendingPayments, setPendingPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadPendingPayments();
+  }, []);
+
+  const loadPendingPayments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select(`
+          *,
+          user:users(name, email),
+          round:rounds(name, round_number)
+        `)
+        .in('payment_status', ['pending', 'paid'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPendingPayments(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar pagamentos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmPayment = async (ticketId) => {
+    if (!confirm('Confirmar pagamento desta cartela?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({
+          payment_status: 'confirmed',
+          confirmed_at: new Date().toISOString()
+        })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+      alert('✅ Pagamento confirmado!');
+      loadPendingPayments();
+    } catch (error) {
+      console.error('Erro ao confirmar pagamento:', error);
+      alert('❌ Erro: ' + error.message);
+    }
+  };
+
+  const rejectPayment = async (ticketId) => {
+    if (!confirm('Rejeitar pagamento desta cartela?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({
+          payment_status: 'rejected'
+        })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+      alert('✅ Pagamento rejeitado!');
+      loadPendingPayments();
+    } catch (error) {
+      console.error('Erro ao rejeitar pagamento:', error);
+      alert('❌ Erro: ' + error.message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold">Confirmar Pagamentos</h2>
+
+      {pendingPayments.length === 0 ? (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-center text-muted-foreground">
+              Nenhum pagamento pendente
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {pendingPayments.map((ticket) => (
+            <Card key={ticket.id}>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <p className="font-bold">{ticket.user?.name}</p>
+                        <p className="text-sm text-muted-foreground">{ticket.user?.email}</p>
+                      </div>
+                      <div className="border-l pl-4">
+                        <p className="text-sm text-muted-foreground">Rodada</p>
+                        <p className="font-semibold">{ticket.round?.name}</p>
+                      </div>
+                      <div className="border-l pl-4">
+                        <p className="text-sm text-muted-foreground">Cartela</p>
+                        <p className="font-semibold">{ticket.ticket_number}</p>
+                      </div>
+                      <div className="border-l pl-4">
+                        <p className="text-sm text-muted-foreground">Valor</p>
+                        <p className="font-semibold text-green-600">R$ {ticket.price.toFixed(2)}</p>
+                      </div>
+                      <div className="border-l pl-4">
+                        <p className="text-sm text-muted-foreground">Status</p>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          ticket.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          ticket.payment_status === 'paid' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {ticket.payment_status === 'pending' ? 'Pendente' :
+                           ticket.payment_status === 'paid' ? 'Pago - Aguardando Confirmação' :
+                           ticket.payment_status}
+                        </span>
+                      </div>
+                    </div>
+                    {ticket.payment_proof_url && (
+                      <div className="mt-2">
+                        <a 
+                          href={`#`} 
+                          className="text-sm text-blue-600 hover:underline"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            alert('Comprovante: ' + ticket.payment_proof_url);
+                          }}
+                        >
+                          📎 Ver comprovante
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <Button
+                      size="sm"
+                      onClick={() => confirmPayment(ticket.id)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Confirmar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => rejectPayment(ticket.id)}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Rejeitar
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

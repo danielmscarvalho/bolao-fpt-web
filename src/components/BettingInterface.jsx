@@ -23,7 +23,8 @@ export function BettingInterface({ round, matches, onSubmit, onCancel }) {
     
     setIsSubmitting(true);
     try {
-      await onSubmit(predictions);
+      const ticketId = await onSubmit(predictions);
+      return ticketId;
     } finally {
       setIsSubmitting(false);
     }

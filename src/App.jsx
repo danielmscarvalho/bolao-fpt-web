@@ -9,6 +9,8 @@ import { BettingInterface } from './components/BettingInterface';
 import { AuthModal } from './components/AuthModal';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminPanel } from './pages/AdminPanel';
+import PixPayment from './components/PixPayment';
+import Notifications from './components/Notifications';
 
 // ============================================
 // HOOKS CUSTOMIZADOS
@@ -159,6 +161,8 @@ function CurrentRound() {
   const { matches, loading: loadingMatches } = useRoundMatches(currentRound?.id);
   const { user } = useAuth();
   const [showBetting, setShowBetting] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
+  const [ticketToPay, setTicketToPay] = useState(null);
 
   const handleSubmitBets = async (predictions) => {
     if (!user) {
@@ -198,8 +202,8 @@ function CurrentRound() {
       
       if (betsError) throw betsError;
       
-      alert(`✅ Palpites confirmados!\n\nNúmero da cartela: ${ticketNumber}\nValor: R$ ${ticket.price.toFixed(2)}\n\nBoa sorte! 🍀`);
-      setShowBetting(false);
+      // Retornar ticket ID para abrir tela de pagamento
+      return ticket.id;
     } catch (error) {
       console.error('Erro ao salvar palpites:', error);
       alert('❌ Erro ao salvar palpites. Tente novamente.');
@@ -228,12 +232,37 @@ function CurrentRound() {
     );
   }
 
+  if (showPayment && ticketToPay) {
+    return (
+      <PixPayment
+        ticketId={ticketToPay.id}
+        amount={ticketToPay.amount}
+        onSuccess={() => {
+          setShowPayment(false);
+          setTicketToPay(null);
+          setShowBetting(false);
+          alert('✅ Pagamento registrado! Aguarde a confirmação do administrador.');
+        }}
+        onCancel={() => {
+          setShowPayment(false);
+          setTicketToPay(null);
+        }}
+      />
+    );
+  }
+
   if (showBetting && matches.length > 0) {
     return (
       <BettingInterface
         round={currentRound}
         matches={matches}
-        onSubmit={handleSubmitBets}
+        onSubmit={async (predictions) => {
+          const ticketId = await handleSubmitBets(predictions);
+          if (ticketId) {
+            setTicketToPay({ id: ticketId, amount: currentRound.ticket_price || 10.00 });
+            setShowPayment(true);
+          }
+        }}
         onCancel={() => setShowBetting(false)}
       />
     );
@@ -510,6 +539,7 @@ function AppContent() {
             
             {user ? (
               <div className="flex items-center gap-3">
+                <Notifications />
                 <div className="flex items-center gap-2">
                   <User className="h-5 w-5 text-muted-foreground" />
                   <span className="font-medium">{user.user_metadata?.name || user.email}</span>
