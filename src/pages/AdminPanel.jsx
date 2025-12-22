@@ -103,7 +103,7 @@ export function AdminPanel() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="rodadas" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="rodadas">
               <Calendar className="h-4 w-4 mr-2" />
               Rodadas
@@ -123,6 +123,10 @@ export function AdminPanel() {
             <TabsTrigger value="pagamentos">
               <Check className="h-4 w-4 mr-2" />
               Pagamentos
+            </TabsTrigger>
+            <TabsTrigger value="configuracoes">
+              <Settings className="h-4 w-4 mr-2" />
+              Configurações
             </TabsTrigger>
           </TabsList>
 
@@ -145,9 +149,134 @@ export function AdminPanel() {
           <TabsContent value="pagamentos">
             <PaymentsManagement />
           </TabsContent>
+
+          <TabsContent value="configuracoes">
+            <SettingsManagement />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
+  );
+}
+
+// ============================================
+// GERENCIAMENTO DE CONFIGURAÇÕES
+// ============================================
+
+function SettingsManagement() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    pix_key_type: 'EMAIL',
+    pix_key: '',
+    pix_receiver_name: ''
+  });
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('competitions')
+        .select('pix_key_type, pix_key, pix_receiver_name')
+        .eq('slug', 'brasileirao-2025')
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setFormData({
+          pix_key_type: data.pix_key_type || 'EMAIL',
+          pix_key: data.pix_key || '',
+          pix_receiver_name: data.pix_receiver_name || ''
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from('competitions')
+        .update(formData)
+        .eq('slug', 'brasileirao-2025');
+
+      if (error) throw error;
+      alert('✅ Configurações salvas com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      alert('❌ Erro ao salvar configurações.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-8">Carregando...</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Configurações de Pagamento (PIX)</CardTitle>
+        <CardDescription>
+          Defina a chave PIX que receberá os pagamentos dos bolões.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSave} className="space-y-4 max-w-md">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Tipo de Chave</label>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={formData.pix_key_type}
+              onChange={(e) => setFormData({ ...formData, pix_key_type: e.target.value })}
+            >
+              <option value="CPF">CPF</option>
+              <option value="EMAIL">E-mail</option>
+              <option value="PHONE">Telefone</option>
+              <option value="RANDOM">Chave Aleatória</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Chave PIX</label>
+            <input
+              type="text"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Digite a chave PIX..."
+              value={formData.pix_key}
+              onChange={(e) => setFormData({ ...formData, pix_key: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Nome do Beneficiário</label>
+            <input
+              type="text"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Nome que aparecerá no banco..."
+              value={formData.pix_receiver_name}
+              onChange={(e) => setFormData({ ...formData, pix_receiver_name: e.target.value })}
+              required
+            />
+          </div>
+
+          <Button type="submit" disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar Configurações'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
